@@ -1,0 +1,6 @@
+App/
+evidence/
+settings.xml
+error.log
+*.zip
+.vs/
