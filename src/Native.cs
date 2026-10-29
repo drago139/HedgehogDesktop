@@ -39,4 +39,38 @@ internal static class Native
             if(screen!=IntPtr.Zero) ReleaseDC(IntPtr.Zero,screen);
         }
     }
+
+    // A prepared frame owns its GDI resources once, rather than per pet per tick.
+    internal sealed class Surface : IDisposable
+    {
+        internal IntPtr DC;
+        IntPtr image,old;
+        internal readonly int Width,Height;
+        internal Surface(Bitmap bitmap)
+        {
+            Width=bitmap.Width;Height=bitmap.Height;
+            try
+            {
+                DC=CreateCompatibleDC(IntPtr.Zero);
+                if(DC==IntPtr.Zero)throw new System.ComponentModel.Win32Exception();
+                image=bitmap.GetHbitmap(Color.FromArgb(0));old=SelectObject(DC,image);
+                if(old==IntPtr.Zero||old==new IntPtr(-1))throw new System.ComponentModel.Win32Exception();
+            }
+            catch {Dispose();throw;}
+        }
+        public void Dispose()
+        {
+            if(DC!=IntPtr.Zero&&old!=IntPtr.Zero&&old!=new IntPtr(-1))SelectObject(DC,old);
+            if(image!=IntPtr.Zero)DeleteObject(image);
+            if(DC!=IntPtr.Zero)DeleteDC(DC);
+            DC=image=old=IntPtr.Zero;
+        }
+    }
+    internal static void Display(IntPtr window,Surface surface,int x,int y)
+    {
+        Point position=new Point(x,y),origin=new Point(0,0);Size size=new Size(surface.Width,surface.Height);
+        Blend blend=new Blend {Op=0,Flags=0,Alpha=255,Format=1};
+        if(!UpdateLayeredWindow(window,IntPtr.Zero,ref position,ref size,surface.DC,ref origin,0,ref blend,2))
+            throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
+    }
 }

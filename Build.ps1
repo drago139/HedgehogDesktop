@@ -33,5 +33,9 @@ if($LASTEXITCODE -ne 0) {exit $LASTEXITCODE}
 if($LASTEXITCODE -ne 0) {exit $LASTEXITCODE}
 Compress-Archive -Path 'assets\throw\*.png' -DestinationPath 'assets\throw-frames.zip' -Force
 Compress-Archive -Path 'assets\walk\*.png' -DestinationPath 'assets\hedgehog-frames.zip' -Force
-& $compiler /nologo /optimize+ /target:winexe /platform:anycpu ('/out:'+ $OutputPath) /win32icon:assets\hedgehog.ico /reference:System.Drawing.dll /reference:System.Windows.Forms.dll /reference:System.IO.Compression.dll /reference:System.IO.Compression.FileSystem.dll /reference:System.Xml.Linq.dll /resource:assets\hedgehog-frames.zip,HedgehogFrames /resource:assets\throw-frames.zip,ThrowFrames src\Program.cs src\PetApplication.cs src\PetRoster.cs src\PetFrames.cs src\Native.cs src\Walker.cs src\PetHitArea.cs src\ThrowMotion.cs src\FrameClock.cs src\PetForm.cs
+& $compiler /nologo /target:exe /out:evidence\RenderCacheTests.exe /reference:System.Drawing.dll /reference:System.IO.Compression.dll /reference:System.IO.Compression.FileSystem.dll /resource:assets\hedgehog-frames.zip,HedgehogFrames /resource:assets\throw-frames.zip,ThrowFrames src\Native.cs src\PetRenderCache.cs src\PetFrames.cs src\PetHitArea.cs src\RenderCacheTests.cs
+if($LASTEXITCODE -ne 0) {exit $LASTEXITCODE}
+& '.\evidence\RenderCacheTests.exe'
+if($LASTEXITCODE -ne 0) {exit $LASTEXITCODE}
+& $compiler /nologo /optimize+ /target:winexe /platform:anycpu ('/out:'+ $OutputPath) /win32icon:assets\hedgehog.ico /reference:System.Drawing.dll /reference:System.Windows.Forms.dll /reference:System.IO.Compression.dll /reference:System.IO.Compression.FileSystem.dll /reference:System.Xml.Linq.dll /resource:assets\hedgehog-frames.zip,HedgehogFrames /resource:assets\throw-frames.zip,ThrowFrames src\Program.cs src\PetApplication.cs src\PetRoster.cs src\PetFrames.cs src\Native.cs src\PetRenderCache.cs src\Walker.cs src\PetHitArea.cs src\ThrowMotion.cs src\FrameClock.cs src\PetForm.cs
 exit $LASTEXITCODE

@@ -17,8 +17,6 @@ internal sealed class PetForm : Form
     readonly ThrowMotion thrown=new ThrowMotion();
     readonly FlickGesture flick=new FlickGesture();
     bool drawnThrow;
-    readonly Timer timer=new Timer();
-    readonly Stopwatch clock=new Stopwatch();
     readonly FrameClock animation=new FrameClock(75,25);
     readonly ContextMenuStrip menu=new ContextMenuStrip();
     readonly Action addPet,closeAll;
@@ -30,6 +28,7 @@ internal sealed class PetForm : Form
     Point dragOffset;
     double lastTime,hiddenUntil;
     int drawnFrame=-1,petWidth=176;
+    int drawnX=Int32.MinValue,drawnY=Int32.MinValue;
     bool drawnRight;
 
     int petHeight { get {return petWidth*200/220;} }
@@ -53,7 +52,6 @@ internal sealed class PetForm : Form
         walker.Place(area.Right-petWidth-90-(ordinal%5)*(petWidth+12),area.Bottom-petHeight-8-(ordinal/5%3)*(petHeight+12),area,petWidth,petHeight);
         ClientSize=new Size(petWidth,petHeight);Location=new Point((int)walker.X,(int)walker.Y);
         BuildMenu();ContextMenuStrip=menu;
-        timer.Interval=16;timer.Tick+=Tick;
         SystemEventsSubscribe();
     }
 
@@ -91,7 +89,7 @@ internal sealed class PetForm : Form
             walker.Place(area.Right-petWidth-40,area.Bottom-petHeight,area,petWidth,petHeight);DrawPet();
         });
         monitor.Enabled=Screen.AllScreens.Length>1;
-        Add("Hide for 30 seconds",delegate {hiddenUntil=clock.Elapsed.TotalSeconds+30;Hide();});
+        Add("Hide for 30 seconds",delegate {hiddenUntil=PetApplication.Now+30;Hide();});
         menu.Items.Add(new ToolStripSeparator());
         Add("Drag quickly and release to throw",null).Enabled=false;
         Add("Remove this hedgehog",delegate {Close();});
@@ -104,20 +102,19 @@ internal sealed class PetForm : Form
         };
     }
 
-    protected override void OnShown(EventArgs e) {base.OnShown(e);DrawPet();clock.Start();timer.Start();}
+    protected override void OnShown(EventArgs e) {base.OnShown(e);lastTime=PetApplication.Now;DrawPet();}
     protected override void OnPaintBackground(PaintEventArgs e) {}
 
-    void Tick(object sender,EventArgs e)
+    internal void Advance(double now,Point cursor)
     {
-        double now=clock.Elapsed.TotalSeconds,elapsed=Math.Max(0,now-lastTime),dt=Math.Min(0.1,elapsed);lastTime=now;
+        double elapsed=Math.Max(0,now-lastTime),dt=Math.Min(0.1,elapsed);lastTime=now;
         if(hiddenUntil>0)
         {
             if(now<hiddenUntil) return;
             hiddenUntil=0;Show();drawnFrame=-1;
         }
         if(dragging||menu.Visible) return;
-        Rectangle hover=Bounds;hover.Inflate(12,12);
-        Point mouse=PointToClient(Cursor.Position);
+        Point mouse=PointToClient(cursor);
         bool hovering=PetHitArea.Contains(ClientSize.Width,ClientSize.Height,mouse.X,mouse.Y);
         bool wasThrown=thrown.Active;
         if(wasThrown)
@@ -128,7 +125,12 @@ internal sealed class PetForm : Form
         else if(!hovering)walker.Step(dt,area,petWidth,petHeight);
         animation.Advance(elapsed,walker.Paused);
         if(CurrentFrame!=drawnFrame||walker.FacingRight!=drawnRight||drawnThrow!=thrown.Active) DrawPet();
-        else Native.SetWindowPos(Handle,IntPtr.Zero,(int)Math.Round(RenderX),(int)Math.Round(RenderY),0,0,0x0001|0x0004|0x0010);
+        else
+        {
+            int x=(int)Math.Round(RenderX),y=(int)Math.Round(RenderY);
+            if(x!=drawnX||y!=drawnY)
+            {Native.SetWindowPos(Handle,IntPtr.Zero,x,y,0,0,0x0001|0x0004|0x0010);drawnX=x;drawnY=y;}
+        }
     }
 
     double RenderX {get {return thrown.Active?thrown.X:walker.X;}}
@@ -137,16 +139,9 @@ internal sealed class PetForm : Form
     void DrawPet()
     {
         if(!IsHandleCreated) return;
-        using(Bitmap output=new Bitmap(petWidth,petHeight,PixelFormat.Format32bppPArgb))
-        using(Graphics graphics=Graphics.FromImage(output))
-        {
-            graphics.Clear(Color.Transparent);graphics.CompositingMode=CompositingMode.SourceCopy;
-            graphics.InterpolationMode=InterpolationMode.NearestNeighbor;graphics.PixelOffsetMode=PixelOffsetMode.Half;
-            if(!thrown.Active&&walker.FacingRight) {graphics.TranslateTransform(petWidth,0);graphics.ScaleTransform(-1,1);}
-            graphics.DrawImage(thrown.Active?PetFrames.ThrowFrames[CurrentFrame]:frames[CurrentFrame],new Rectangle(0,0,petWidth,petHeight),0,0,220,200,GraphicsUnit.Pixel);
-            PetHitArea.MakeClickable(output);
-            Native.Display(Handle,output,(int)Math.Round(RenderX),(int)Math.Round(RenderY));
-        }
+        Native.Surface prepared=PetRenderCache.Get(petWidth,CurrentFrame,thrown.Active,walker.FacingRight);
+        Native.Display(Handle,prepared,(int)Math.Round(RenderX),(int)Math.Round(RenderY));
+        drawnX=(int)Math.Round(RenderX);drawnY=(int)Math.Round(RenderY);
         drawnFrame=CurrentFrame;drawnRight=walker.FacingRight;drawnThrow=thrown.Active;
     }
 
@@ -156,7 +151,7 @@ internal sealed class PetForm : Form
         if(e.Button==MouseButtons.Left) {
             double x=RenderX,y=RenderY;thrown.Stop();bool bottom=walker.BottomOnly;walker.BottomOnly=false;
             walker.Place(x,y,area,petWidth,petHeight);walker.BottomOnly=bottom;
-            dragging=true;dragOffset=e.Location;flick.Begin(clock.Elapsed.TotalSeconds,Cursor.Position.X,Cursor.Position.Y);Capture=true;
+            dragging=true;dragOffset=e.Location;flick.Begin(PetApplication.Now,Cursor.Position.X,Cursor.Position.Y);Capture=true;
         }
 
     }
@@ -165,12 +160,12 @@ internal sealed class PetForm : Form
         base.OnMouseMove(e);
         if(dragging)
         {
-            Point cursor=Cursor.Position;flick.Move(clock.Elapsed.TotalSeconds,cursor.X,cursor.Y);area=Screen.FromPoint(cursor).WorkingArea;
+            Point cursor=Cursor.Position;flick.Move(PetApplication.Now,cursor.X,cursor.Y);area=Screen.FromPoint(cursor).WorkingArea;
             walker.Place(cursor.X-dragOffset.X,cursor.Y-dragOffset.Y,area,petWidth,petHeight);DrawPet();
         }
     }
     protected override void OnMouseUp(MouseEventArgs e) {base.OnMouseUp(e);if(e.Button==MouseButtons.Left&&dragging) {
-        PointF velocity=flick.Release(clock.Elapsed.TotalSeconds,Cursor.Position.X,Cursor.Position.Y);
+        PointF velocity=flick.Release(PetApplication.Now,Cursor.Position.X,Cursor.Position.Y);
         dragging=false;Capture=false;
         if(velocity!=PointF.Empty) {walker.Paused=false;thrown.Launch(walker.X,walker.Y,velocity.X,velocity.Y);DrawPet();}
     }}
@@ -220,7 +215,7 @@ internal sealed class PetForm : Form
     }
     protected override void OnFormClosed(FormClosedEventArgs e)
     {
-        timer.Stop();timer.Dispose();SaveSettings();
+        SaveSettings();
         Microsoft.Win32.SystemEvents.DisplaySettingsChanged-=DisplayChanged;
         menu.Dispose();
         base.OnFormClosed(e);

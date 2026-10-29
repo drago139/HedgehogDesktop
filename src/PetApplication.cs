@@ -1,11 +1,16 @@
 ﻿using System;
 using System.Drawing;
+using System.Diagnostics;
 using System.Windows.Forms;
 internal sealed class PetApplication : ApplicationContext
 {
     readonly PetRoster<PetForm> pets=new PetRoster<PetForm>();
     readonly NotifyIcon tray=new NotifyIcon();
     readonly ContextMenuStrip menu=new ContextMenuStrip();
+    readonly Timer timer=new Timer();
+    static readonly Stopwatch clock=Stopwatch.StartNew();
+    internal static double Now {get {return clock.Elapsed.TotalSeconds;}}
+    PetForm[] active=new PetForm[0];
     bool closing;
     int ordinal;
     internal PetApplication()
@@ -23,15 +28,22 @@ internal sealed class PetApplication : ApplicationContext
         }
         tray.ContextMenuStrip=menu;tray.DoubleClick+=delegate {AddPet();};
         AddPet();tray.Visible=true;
+        timer.Interval=16;timer.Tick+=UpdatePets;timer.Start();
+    }
+    void UpdatePets(object sender,EventArgs e)
+    {
+        double now=Now;Point cursor=Cursor.Position;
+        foreach(PetForm pet in active)if(!pet.IsDisposed)pet.Advance(now,cursor);
     }
     void AddPet()
     {
         if(closing)return;
         PetForm pet=new PetForm(AddPet,CloseAll,ordinal++);
         pets.Add(pet);
-        pet.FormClosed+=delegate {pets.Remove(pet);UpdateTray();if(pets.Count==0&&!closing)ExitThread();};
+        active=pets.Snapshot();
+        pet.FormClosed+=delegate {pets.Remove(pet);active=pets.Snapshot();UpdateTray();if(pets.Count==0&&!closing)ExitThread();};
         try {pet.Show();UpdateTray();}
-        catch {pets.Remove(pet);pet.Dispose();throw;}
+        catch {pets.Remove(pet);active=pets.Snapshot();pet.Dispose();throw;}
     }
     void UpdateTray() {tray.Text="Hedgehogs: "+pets.Count+" - right-click for menu";}
     void CloseAll()
@@ -44,8 +56,9 @@ internal sealed class PetApplication : ApplicationContext
     {
         if(disposing)
         {
+            timer.Stop();timer.Dispose();
             closing=true;foreach(PetForm pet in pets.Snapshot()) {pet.Close();pet.Dispose();}
-            tray.Visible=false;if(tray.Icon!=null)tray.Icon.Dispose();tray.Dispose();menu.Dispose();PetFrames.Release();
+            tray.Visible=false;if(tray.Icon!=null)tray.Icon.Dispose();tray.Dispose();menu.Dispose();PetRenderCache.Release();PetFrames.Release();
         }
         base.Dispose(disposing);
     }

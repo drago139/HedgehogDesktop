@@ -49,3 +49,6 @@ Preferences are saved to `settings.xml` next to the EXE. Keep that file when upd
 ## Artwork
 
 Character reference supplied by the project owner. The spin animation was extracted from owner-supplied footage generated with Google Gemini. Sprite preparation preserves reference colors and uses nearest-neighbor scaling. This project is not affiliated with Google, Mojang or Microsoft.
+
+
+Local performance update (2026-10-30): one shared UI timer; bounded64MiB/512-entry prepared-frame cache; avoid unchanged-position window calls. Pixel-equivalence/GDI cleanup and existing regression suites pass. Isolated real-window measurements:100pets about15 ->25 observed animation changes/s.809 separate transparent windows still lag severely; this update does not promise a smooth809-pet swarm. Hover-to-wait behavior is unchanged.
